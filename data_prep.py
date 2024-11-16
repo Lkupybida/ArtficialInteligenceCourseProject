@@ -9,6 +9,7 @@ def xlsb_to_csv_wrapper():
     df = add_lat_lon(df, 'InternalNum')
     df = add_station_type(df, 'Station')
     df = create_type_dummies(df, 'Type')
+    df = charging_time(df, 'Start', 'End')
     df.to_csv('data/dataset.csv')
 
 def start_end_time(df, col):
@@ -74,3 +75,9 @@ def create_type_dummies(df, col):
     
     return df
 
+def charging_time(df, col1, col2):
+    df[col1] = pd.to_datetime(df[col1])
+    df[col2] = pd.to_datetime(df[col2])
+
+    df['ChargingTime'] = round((df[col2] - df[col1]).dt.total_seconds() / 60, 2)
+    return df
