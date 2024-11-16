@@ -47,3 +47,12 @@ def translate_cols(df):
                  'Client', 'Tariff', 'MaxPower', 'Fishka', 'Successful', 'DisconnectionReason']
     df = df[new_order]
     return df
+
+
+def add_lat_lon(df, col):
+    locations = pd.read_csv('data/locations.csv')
+    locations.rename(columns={'Унікод АЗС': col})
+    result = pd.merge(df, locations, on=col, how='left')
+    return result
+
+
