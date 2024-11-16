@@ -7,6 +7,7 @@ def xlsb_to_csv_wrapper():
     df = translate_cols(df)
     df = df.drop(columns='ChargingTime')
     df = add_lat_lon(df, 'InternalNum')
+    df = add_station_type(df, 'Station')
     df.to_csv('data/dataset.csv')
 
 def start_end_time(df, col):
@@ -54,10 +55,14 @@ def add_lat_lon(df, col):
     locations = pd.read_csv('data/locations.csv')
     locations = locations.rename(columns={'Унікод АЗС': col})
     locations = locations[['Latitude', 'Longitude', col]]
-    print(locations)
     result = pd.merge(df, locations, on=col, how='left')
-    result = result.drop(columns = ['InternalNum'])
+    result = result.drop(columns = [col])
     return result
 
-
+def add_station_type(df, col):
+    stations = pd.read_excel("data/original/Транзакції_електрозарядки_01.2021-10.2024.xlsb", engine="pyxlsb", sheet_name=1, usecols=['Станція', 'Тип станції'])
+    stations = stations.rename(columns={'Станція': col, 'Тип станції': 'Type'})
+    result = pd.merge(df, stations, on=col, how='left')
+    result = result.drop(columns = [col])
+    return result
 
