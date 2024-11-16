@@ -8,9 +8,10 @@ def xlsb_to_csv_wrapper():
     df = df.drop(columns='ChargingTime')
     df = add_lat_lon(df, 'InternalNum')
     df = add_station_type(df, 'Station')
-    df = create_type_dummies(df, 'Type')
     df = charging_time(df, 'Start', 'End')
-    df.to_csv('data/dataset.csv')
+    df['Revenue'] = df['Revenue'].replace({'\xa0': '', ',': '.'}, regex=True)
+    df['Revenue'] = df['Revenue'].astype(float)
+    df.to_csv('data/original/dataset.csv', index=False)
 
 def start_end_time(df, col):
     df[['Start', 'Finish']] = df[col].str.split('-', expand=True)
@@ -65,7 +66,7 @@ def add_station_type(df, col):
     stations = pd.read_excel("data/original/Транзакції_електрозарядки_01.2021-10.2024.xlsb", engine="pyxlsb", sheet_name=1, usecols=['Станція', 'Тип станції'])
     stations = stations.rename(columns={'Станція': col, 'Тип станції': 'Type'})
     result = pd.merge(df, stations, on=col, how='left')
-    result = result.drop(columns = [col])
+    # result = result.drop(columns = [col])
     return result
 
 def create_type_dummies(df, col):
@@ -80,4 +81,19 @@ def charging_time(df, col1, col2):
     df[col2] = pd.to_datetime(df[col2])
 
     df['ChargingTime'] = round((df[col2] - df[col1]).dt.total_seconds() / 60, 2)
+    return df
+
+def clean_data_wrapper():
+    df = pd.read_csv('data/original/dataset.csv')
+    df = df.dropna(subset=['Successful','Adapter'])
+    df = drop_unnecesary_data(df)
+    df['Client'] = df['Client'].astype(str)
+    df['PortType'] = df['PortType'].astype(str)
+    df['Start'] = pd.to_datetime(df['Start'], format='%Y-%m-%d %H:%M:%S')
+    df['End'] = pd.to_datetime(df['End'], format='%Y-%m-%d %H:%M:%S')
+    df.to_csv('data/clean/dataset.csv', index_label='idx')
+
+def drop_unnecesary_data(df):
+    cols = ['Successful', 'City', 'DisconnectionReason', 'SessionID']
+    df = df.drop(columns=cols)
     return df
