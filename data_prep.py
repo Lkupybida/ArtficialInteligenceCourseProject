@@ -6,6 +6,7 @@ def xlsb_to_csv_wrapper():
     df = true_falsify(df, ['Зарядка через адаптер', 'Fishka', 'Успішна'])
     df = translate_cols(df)
     df = df.drop(columns='ChargingTime')
+    df = add_lat_lon(df, 'InternalNum')
     df.to_csv('data/dataset.csv')
 
 def start_end_time(df, col):
@@ -51,8 +52,12 @@ def translate_cols(df):
 
 def add_lat_lon(df, col):
     locations = pd.read_csv('data/locations.csv')
-    locations.rename(columns={'Унікод АЗС': col})
+    locations = locations.rename(columns={'Унікод АЗС': col})
+    locations = locations[['Latitude', 'Longitude', col]]
+    print(locations)
     result = pd.merge(df, locations, on=col, how='left')
+    result = result.drop(columns = ['InternalNum'])
     return result
+
 
 
