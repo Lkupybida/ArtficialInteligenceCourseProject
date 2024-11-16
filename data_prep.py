@@ -8,6 +8,7 @@ def xlsb_to_csv_wrapper():
     df = df.drop(columns='ChargingTime')
     df = add_lat_lon(df, 'InternalNum')
     df = add_station_type(df, 'Station')
+    df = create_type_dummies(df, 'Type')
     df.to_csv('data/dataset.csv')
 
 def start_end_time(df, col):
@@ -65,4 +66,11 @@ def add_station_type(df, col):
     result = pd.merge(df, stations, on=col, how='left')
     result = result.drop(columns = [col])
     return result
+
+def create_type_dummies(df, col):
+    df = pd.get_dummies(df, columns=[col], prefix=col, drop_first=True)
+    dummy_cols = [c for c in df.columns if c.startswith(f"{col}_")]
+    df[dummy_cols] = df[dummy_cols].astype(int)
+    
+    return df
 
