@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import openmeteo_requests
 import requests_cache
@@ -196,6 +198,7 @@ def add_weather_data():
             df_azk_hourly['InternalNum'] = df_azk['InternalNum'].values[0]
             azk_dfs_list.append(df_azk_hourly)
             pbar.update(1)
+            break
     weathered_dfs_list = []
     with tqdm(total=len(df['Latitude'].unique()), desc="Adding weather") as pbar:
         for difi in azk_dfs_list:
@@ -288,7 +291,7 @@ def add_weather_data():
                 hourly_dataframe = pd.DataFrame(data=hourly_data)
 
                 weathered_dfs_list.append(pd.concat([difi, hourly_dataframe], axis=1).dropna())
-                pd.concat([difi, hourly_dataframe], axis=1).dropna().to_csv(f'data/clean/azk/{difi['InternalNum'].values[0]}.csv')
+                pd.concat([difi, hourly_dataframe], axis=1).dropna().to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv")
                 pbar.update(1)
             except Exception as e:
                 time.sleep(60)
@@ -378,10 +381,23 @@ def add_weather_data():
                 }
 
                 hourly_dataframe = pd.DataFrame(data=hourly_data)
-
-                weathered_dfs_list.append(pd.concat([difi, hourly_dataframe], axis=1).dropna())
-                pd.concat([difi, hourly_dataframe], axis=1).dropna().to_csv(f'data/clean/azk/{difi['InternalNum'].values[0]}.csv')
+                difi['time'] = pd.to_datetime(difi['time'])
+                hourly_dataframe['date'] = pd.to_datetime(hourly_dataframe['date'])
+                azk_weathered = pd.merge(
+                    difi.rename(columns={"time": "datetime"}),
+                    hourly_dataframe.rename(columns={"date": "datetime"}),
+                    on="datetime",
+                    how="inner"
+                )
+                weathered_dfs_list.append(azk_weathered)
+                azk_weathered.to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv")
                 pbar.update(1)
-
+            break
     df_weathered = pd.concat(weathered_dfs_list, axis=0)
     df_weathered.to_csv('data/clean/weathered.csv')
+
+def concat_csv_files(directory):
+    csv_files = [file for file in os.listdir(directory) if file.endswith('.csv')]
+    dataframes = [pd.read_csv(os.path.join(directory, file), index_col=0, header=0) for file in csv_files]
+    combined_df = pd.concat(dataframes, axis=0, ignore_index=True)
+    return combined_df
