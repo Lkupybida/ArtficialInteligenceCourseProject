@@ -289,9 +289,17 @@ def add_weather_data():
                 }
 
                 hourly_dataframe = pd.DataFrame(data=hourly_data)
+                difi['time'] = pd.to_datetime(difi['time'])
+                hourly_dataframe['date'] = pd.to_datetime(hourly_dataframe['date'])
+                azk_weathered = pd.merge(
+                    difi.rename(columns={"time": "datetime"}),
+                    hourly_dataframe.rename(columns={"date": "datetime"}),
+                    on="datetime",
+                    how="inner"
+                )
 
-                weathered_dfs_list.append(pd.concat([difi, hourly_dataframe], axis=1).dropna())
-                pd.concat([difi, hourly_dataframe], axis=1).dropna().to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv")
+                weathered_dfs_list.append(azk_weathered)
+                azk_weathered.to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv", index=False)
                 pbar.update(1)
             except Exception as e:
                 time.sleep(60)
@@ -390,11 +398,11 @@ def add_weather_data():
                     how="inner"
                 )
                 weathered_dfs_list.append(azk_weathered)
-                azk_weathered.to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv")
+                azk_weathered.to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv", index=False)
                 pbar.update(1)
             # break
     df_weathered = pd.concat(weathered_dfs_list, axis=0)
-    df_weathered.to_csv('data/clean/weathered.csv')
+    df_weathered.to_csv('data/clean/weathered.csv', index=False)
 
 def concat_csv_files(directory):
     csv_files = [file for file in os.listdir(directory) if file.endswith('.csv')]
