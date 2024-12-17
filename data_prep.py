@@ -59,7 +59,6 @@ def add_lat_lon(df, col):
     locations = locations.rename(columns={'Унікод АЗС': col})
     locations = locations[['Latitude', 'Longitude', col]]
     result = pd.merge(df, locations, on=col, how='left')
-    # result = result.drop(columns = [col])
     return result
 
 def add_station_type(df, col):
@@ -95,7 +94,7 @@ def clean_data_wrapper():
     df.to_csv('data/clean/dataset.csv', index_label='idx')
 
 def drop_unnecesary_data(df):
-    cols = ['Successful', 'City', 'DisconnectionReason', 'SessionID', 'InternalNum']
+    cols = ['Successful', 'City', 'DisconnectionReason', 'SessionID']
     df = df.drop(columns=cols)
     return df
 
