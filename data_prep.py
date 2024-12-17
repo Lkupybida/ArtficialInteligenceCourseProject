@@ -198,7 +198,7 @@ def add_weather_data():
             df_azk_hourly['InternalNum'] = df_azk['InternalNum'].values[0]
             azk_dfs_list.append(df_azk_hourly)
             pbar.update(1)
-            break
+            # break
     weathered_dfs_list = []
     with tqdm(total=len(df['Latitude'].unique()), desc="Adding weather") as pbar:
         for difi in azk_dfs_list:
@@ -392,7 +392,7 @@ def add_weather_data():
                 weathered_dfs_list.append(azk_weathered)
                 azk_weathered.to_csv(f"data/clean/azk/{difi['InternalNum'].values[0]}.csv")
                 pbar.update(1)
-            break
+            # break
     df_weathered = pd.concat(weathered_dfs_list, axis=0)
     df_weathered.to_csv('data/clean/weathered.csv')
 
