@@ -1,4 +1,11 @@
 import pandas as pd
+import openmeteo_requests
+import requests_cache
+from retry_requests import retry
+import numpy as np
+from datetime import timedelta
+from tqdm import tqdm
+
 
 def xlsb_to_csv_wrapper():
     df = pd.read_excel('data/original/Транзакції_електрозарядки_01.2021-10.2024.xlsb', sheet_name='Base_01_2021-10_2024')
@@ -109,13 +116,6 @@ def create_hourly_dataset():
     hourly_df.reset_index(inplace=True)
     hourly_df.to_csv('data/clean/hourly.csv', index=False)
 
-
-import pandas as pd
-import numpy as np
-from datetime import timedelta
-from tqdm import tqdm
-
-
 def convert_to_hourly_charging(df):
     min_time = df['Start'].min().floor('h')
     max_time = df['End'].max().ceil('h')
@@ -158,8 +158,8 @@ def convert_to_hourly_charging(df):
     # print(f"Conversion complete. Output saved to {output_file}")
     return result_df
 
-def convert_to_hourly_by_station(input_file):
-    df = pd.read_csv(input_file, parse_dates=['Start', 'End'], low_memory=False)
+def convert_to_hourly_by_station():
+    df = pd.read_csv('data/clean/dataset.csv', parse_dates=['Start', 'End'], low_memory=False)
     df_hourly_azk = pd.DataFrame()
     azk_dfs_list = []
     hapes= 0
@@ -171,9 +171,55 @@ def convert_to_hourly_by_station(input_file):
             df_azk_hourly = convert_to_hourly_charging(df_azk)
             df_azk_hourly['Latitude'] = azk_num
             df_azk_hourly['Longitude'] = df_azk['Longitude'].values[0]
+            df_azk_hourly['InternalNum'] = df_azk['InternalNum'].values[0]
             azk_dfs_list.append(df_azk_hourly)
             hapes = hapes + df_azk_hourly.shape[0]
             pbar.update(1)
     df_hourly_azk = pd.concat(azk_dfs_list, axis=0)
 
     df_hourly_azk.to_csv('data/clean/hourly_uniformly_azk.csv', index=False)
+
+def add_weather_data():
+    df = pd.read_csv('data/clean/dataset.csv', parse_dates=['Start', 'End'], low_memory=False)
+
+
+    cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+    openmeteo = openmeteo_requests.Client(session=retry_session)
+
+    url = "https://archive-api.open-meteo.com/v1/archive"
+    params = {
+        "latitude": 50.0589,
+        "longitude": 23.9736,
+        "start_date": "2024-01-02",
+        "end_date": "2024-11-08",
+        "hourly": ["temperature_2m", "dew_point_2m", "rain", "snowfall"],
+        "timezone": "auto"
+    }
+    responses = openmeteo.weather_api(url, params=params)
+
+    response = responses[0]
+    print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
+    print(f"Elevation {response.Elevation()} m asl")
+    print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
+    print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
+
+    hourly = response.Hourly()
+    hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+    hourly_dew_point_2m = hourly.Variables(1).ValuesAsNumpy()
+    hourly_rain = hourly.Variables(2).ValuesAsNumpy()
+    hourly_snowfall = hourly.Variables(3).ValuesAsNumpy()
+
+    hourly_data = {"date": pd.date_range(
+        start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left"
+    )}
+    hourly_data["temperature_2m"] = hourly_temperature_2m
+    hourly_data["dew_point_2m"] = hourly_dew_point_2m
+    hourly_data["rain"] = hourly_rain
+    hourly_data["snowfall"] = hourly_snowfall
+
+    hourly_dataframe = pd.DataFrame(data=hourly_data)
+    print(hourly_dataframe)
