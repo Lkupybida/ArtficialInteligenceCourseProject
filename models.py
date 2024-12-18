@@ -178,7 +178,7 @@ def optimize_model(model_name, train, features, categorical, trials):
                                                                       n_trials=trials,
                                                                       fixed_params=fixed_params)
 
-    print("Best parameters for LGBM:", study.best_params)
+    print("Best parameters:", study.best_params)
     print(f"Nested CV RMSE: {cv_score}")
     print(f"Test set score: {test_score}")
     return study, best_model, cv_score, test_score
