@@ -10,3 +10,6 @@ if __name__ == "__main__":
     # add_weather_data()
 
     # add_weather_data_outages()
+
+    df = add_time_features(optimized_weathered_df())
+    split_df_into_three_parts(df, "data/clean/time_feature_engineered")

@@ -1,5 +1,5 @@
 import os
-
+from sklearn.metrics import mean_absolute_percentage_error as calc_mape
 import pandas as pd
 import openmeteo_requests
 import requests_cache
@@ -682,3 +682,121 @@ def combine_csv_parts(file_paths=['data/clean/weathered/part_1.csv', 'data/clean
     combined_df = pd.concat(dfs, ignore_index=True)
     return combined_df
 
+def split_df_into_three_parts(df, output_dir):
+    chunk_size = len(df) // 3
+    remainder = len(df) % 3
+
+    splits = [
+        df.iloc[i * chunk_size + min(i, remainder):(i + 1) * chunk_size + min(i + 1, remainder)]
+        for i in range(3)
+    ]
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    output_files = []
+    for i, split in enumerate(splits):
+        file_path = os.path.join(output_dir, f"part_{i + 1}.csv")
+        split.to_csv(file_path, index=False)
+        output_files.append(file_path)
+
+    return output_files
+
+
+def get_season(pickup):
+    month = pickup.month
+    if month in [12, 1, 2]:
+        return 'Winter'
+    elif month in [3, 4, 5]:
+        return 'Spring'
+    elif month in [6, 7, 8]:
+        return 'Summer'
+    elif month in [9, 10, 11]:
+        return 'Fall'
+
+def get_season_number(pickup):
+    month = pickup.month
+    if month in [12, 1, 2]:
+        return 1
+    elif month in [3, 4, 5]:
+        return 2
+    elif month in [6, 7, 8]:
+        return 3
+    elif month in [9, 10, 11]:
+        return 4
+
+
+def add_time_features(df):
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df['hour'] = df['datetime'].dt.hour
+    df['day_of_week'] = df['datetime'].dt.dayofweek
+    df['day_of_month'] = df['datetime'].dt.day
+    df['day_of_year'] = df['datetime'].dt.dayofyear
+    df['month'] = df['datetime'].dt.month
+    df['year'] = df['datetime'].dt.year
+    df['is_night'] = ((df['hour'] >= 21) | (df['hour'] < 6)).astype(int)
+    df['Season'] = df['datetime'].apply(get_season)
+
+    return df
+
+def get_fully_featured_df(categorical = False, categories = [], bad_cols = True):
+    df = combine_csv_parts(['data/clean/time_feature_engineered/part_1.csv', 'data/clean/time_feature_engineered/part_2.csv', 'data/clean/time_feature_engineered/part_3.csv'])
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df['kWh'] = df['kWh'].astype(np.float32)
+    df['Latitude'] = df['Latitude'].astype(np.float32)
+    df['Longitude'] = df['Longitude'].astype(np.float32)
+    df['InternalNum'] = df['InternalNum'].astype(np.int32)
+    df['temperature_2m'] = df['temperature_2m'].astype(np.float32)
+    df['dew_point_2m'] = df['dew_point_2m'].astype(np.float32)
+    df['rain'] = df['rain'].astype(np.float32)
+    df['snowfall'] = df['snowfall'].astype(np.float32)
+    df['apparent_temperature'] = df['apparent_temperature'].astype(np.float16)
+    df.drop(columns=['relative_humidity_2m', 'precipitation'])
+    df['showers'] = df['showers'].astype(np.float16)
+    df['snow_depth'] = df['snow_depth'].astype(np.float16)
+    df['weathercode'] = df['weathercode'].astype(np.float32)
+    df['cloudcover'] = df['cloudcover'].astype(np.float16)
+    df['winddirection_10m'] = df['winddirection_10m'].astype(np.float16)
+    df['shortwave_radiation'] = df['shortwave_radiation'].astype(np.float32)
+    df['surface_pressure'] = df['surface_pressure'].astype(np.float16)
+    df['visibility'] = df['visibility'].astype(np.float16)
+
+    df['is_night'] = df['is_night'].astype(np.int8)
+    df['day_of_week'] = df['day_of_week'].astype(np.int8)
+    df['month'] = df['month'].astype(np.int8)
+    df['day_of_month'] = df['day_of_month'].astype(np.int8)
+    df['hour'] = df['hour'].astype(np.int8)
+    df['day_of_year'] = df['day_of_year'].astype(np.int16)
+    df['year'] = df['year'].astype(np.int16)
+    df['Season'] = df['datetime'].apply(get_season_number)
+
+    bad_coluns = ['precipitation', 'relative_humidity_2m',
+        'showers', 'apparent_temperature', 'surface_pressure',
+        'Season', 'is_night', 'visibility', 'month']
+    if bad_cols:
+        for col in bad_coluns:
+            df = df.drop(columns=col)
+            try:
+                categories.remove(col)
+            except:
+                i = 1
+    if categorical:
+        if not categories:
+            categories = ['is_night', 'day_of_week', 'month', 'day_of_month', 'hour', 'day_of_year', 'year', 'Season']
+            if bad_cols:
+                for col in bad_coluns:
+                    try:
+                        categories.remove(col)
+                    except:
+                        i = 1
+        categories.append('InternalNum')
+        df = get_dummies(df, categories)
+
+    return df
+
+def get_dummies(df, cols):
+    for col in cols:
+        dummies = pd.get_dummies(df[col], prefix=col, drop_first=False)
+        df = pd.concat([df, dummies], axis=1)
+        df.drop(col, axis=1, inplace=True)
+    return df
