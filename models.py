@@ -166,7 +166,7 @@ def get_params(model_name, train, categorical):
 
     return model, param_space, fixed_params, train
 
-def optimize_model(model_name, train, features, categorical, trials):
+def optimize_model(model_name, train, features, categorical=None, trials=1):
 
     model, param_space, fixed_params, train = get_params(model_name, train, categorical)
 
