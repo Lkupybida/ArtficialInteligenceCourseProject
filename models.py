@@ -45,7 +45,7 @@ def objective(trial, regressor, X, y, param_space, fixed_params):
                       for key, values in param_space.items()}
     params = {**fixed_params, **sampled_params}
     model = clone(regressor).set_params(**params)
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    kf = KFold(n_splits=5, shuffle=True)
     scores = []
     for train_index, val_index in kf.split(X):
         X_train_fold, X_val_fold = X.iloc[train_index], X.iloc[val_index]
@@ -61,7 +61,7 @@ def objective(trial, regressor, X, y, param_space, fixed_params):
 
 
 def optimize_regressor(regressor, param_space, X, y, n_trials=100, fixed_params={}, verbose=False):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
     if verbose:
         optuna.logging.set_verbosity(optuna.logging.INFO)
     else:
