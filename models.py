@@ -20,6 +20,7 @@ import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 from sklearn.metrics import mean_absolute_percentage_error as calc_mape
+# from sktime.performance_metrics.forecasting import MeanAbsolutePercentageError
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -217,8 +218,15 @@ def vizualize_percentiles(df, test, val, model, features):
         k = k + 1
 
 def mape(y_true, y_pred):
-    y_true_adjusted = np.array(y_true) + 1
-    y_pred_adjusted = np.array(y_pred) + 1
+
+    y_true_adjusted = np.array(y_true) + 1 + abs(min(y_true))
+    y_pred_adjusted = np.array(y_pred) + 1 + abs(min(y_true))
 
     mape = np.mean(np.abs((y_true_adjusted - y_pred_adjusted) / y_true_adjusted))
     return mape
+
+def smape(A, F):
+    with np.errstate(divide='ignore', invalid='ignore'):
+        tmp = 2 * np.abs(F-A) / (np.abs(A) + np.abs(F))
+    tmp[np.isnan(tmp)] = 0
+    return np.sum(tmp) / len(tmp)
