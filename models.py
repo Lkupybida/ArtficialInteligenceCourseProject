@@ -19,6 +19,7 @@ from sklearn.model_selection import KFold
 import lightgbm as lgb
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
+from sklearn.metrics import mean_absolute_percentage_error as calc_mape
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -182,3 +183,42 @@ def optimize_model(model_name, train, features, categorical=None, trials=1):
     print(f"Nested CV RMSE: {cv_score}")
     print(f"Test set score: {test_score}")
     return study, best_model, cv_score, test_score
+
+def vizualize_percentiles(df, test, val, model, features):
+    azk_list = df.columns.tolist()[526 - 81:]
+    errors_df = pd.DataFrame(columns=['InternalNum', 'Valid', 'Test', 'Mean', 'Val_Preds', 'Test_Preds'])
+    for col in azk_list:
+        test_x = test[test[col] == True]
+        val_x = val[val[col] == True]
+        try:
+            valid_preds_x = model.predict(val_x[features])
+            test_preds_x = model.predict(test_x[features])
+            # print(val_x)
+            err_v = mape(val_x['kWh'], valid_preds_x)
+            err_t = mape(test_x['kWh'], test_preds_x)
+            err_m = (err_v + err_t) / 2
+            errors_df.loc[len(errors_df)] = [col, err_v, err_t, err_m, valid_preds_x, test_preds_x]
+        except:
+            continue
+
+    percentiles = errors_df['Mean'].quantile([0, 0.25, 0.5, 0.75, 1])
+    k = 0
+    names = ['AZK with smallest error', 'AZK with 25% percentile error', 'AZK with median error',
+             'AZK with 75% percentile error', 'AZK with biggest error']
+    for i in percentiles:
+        num = errors_df[errors_df['Mean'] == i]
+        test_x = test[test[num['InternalNum'].values[0]] == True]
+        val_x = val[val[num['InternalNum'].values[0]] == True]
+        plt.figure(figsize=(15, 6))
+        plt.style.use('dark_background')
+        plt.title(names[k] + f' Error: {i}')
+        plt.plot(test_x['datetime'], num['Test_Preds'].values[0], color='#91be1e', linestyle='--')
+        plt.plot(test_x['datetime'], test_x['kWh'], color='white')
+        k = k + 1
+
+def mape(y_true, y_pred):
+    y_true_adjusted = np.array(y_true) + 1
+    y_pred_adjusted = np.array(y_pred) + 1
+
+    mape = np.mean(np.abs((y_true_adjusted - y_pred_adjusted) / y_true_adjusted))
+    return mape

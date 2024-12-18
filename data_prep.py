@@ -1,5 +1,5 @@
 import os
-
+from sklearn.metrics import mean_absolute_percentage_error as calc_mape
 import pandas as pd
 import openmeteo_requests
 import requests_cache
