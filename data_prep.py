@@ -409,3 +409,243 @@ def concat_csv_files(directory):
     dataframes = [pd.read_csv(os.path.join(directory, file), index_col=0, header=0) for file in csv_files]
     combined_df = pd.concat(dataframes, axis=0, ignore_index=True)
     return combined_df
+
+def optimized_weathered_df():
+    df = pd.read_csv('data/clean/weathered.csv')
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df['kWh'] = df['kWh'].astype(np.float32)
+    df['Latitude'] = df['Latitude'].astype(np.float32)
+    df['Longitude'] = df['Longitude'].astype(np.float32)
+    df['InternalNum'] = df['InternalNum'].astype(np.int32)
+    df['InternalNum'] = pd.Categorical(df['InternalNum'])
+    df['temperature_2m'] = df['temperature_2m'].astype(np.float32)
+    df['dew_point_2m'] = df['dew_point_2m'].astype(np.float32)
+    df['rain'] = df['rain'].astype(np.float32)
+    df['snowfall'] = df['snowfall'].astype(np.float32)
+    df['apparent_temperature'] = df['apparent_temperature'].astype(np.float16)
+    df.drop(columns=['relative_humidity_2m', 'precipitation'])
+    df['showers'] = df['showers'].astype(np.float16)
+    df['snow_depth'] = df['snow_depth'].astype(np.float16)
+    df['weathercode'] = df['weathercode'].astype(np.float32)
+    df['weathercode'] = pd.Categorical(df['weathercode'])
+    df['cloudcover'] = df['cloudcover'].astype(np.float16)
+    df['winddirection_10m'] = df['winddirection_10m'].astype(np.float16)
+    df['shortwave_radiation'] = df['shortwave_radiation'].astype(np.float32)
+    df['surface_pressure'] = df['surface_pressure'].astype(np.float16)
+    df['visibility'] = df['visibility'].astype(np.float16)
+    return df
+
+def add_weather_data_outages():
+    df = pd.read_csv('data/clean/outages.csv', parse_dates=['ДатаЧас'], low_memory=False)
+    azk_dfs_list = []
+    with tqdm(total=len(df['Унікод АЗС'].unique()), desc="Processing AZK") as pbar:
+        for azk_num in df['Унікод АЗС'].unique():
+            df_azk = pd.DataFrame()
+            df_azk = df[df['Унікод АЗС'] == azk_num]
+            azk_dfs_list.append(df_azk)
+            pbar.update(1)
+            # break
+    weathered_dfs_list = []
+    with tqdm(total=len(df['Унікод АЗС'].unique()), desc="Adding weather") as pbar:
+        for difi in azk_dfs_list:
+            try:
+                start_date = difi['ДатаЧас'].values[0]
+                end_date = difi['ДатаЧас'].values[difi.shape[0]-1]
+
+                start_date = pd.to_datetime(start_date).strftime('%Y-%m-%d')
+                end_date = pd.to_datetime(end_date).strftime('%Y-%m-%d')
+
+                cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+                retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+                openmeteo = openmeteo_requests.Client(session=retry_session)
+
+                url = "https://archive-api.open-meteo.com/v1/archive"
+                params = {
+                    "latitude": difi['Latitude'].values[0],
+                    "longitude": difi['Longitude'].values[0],
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "hourly": ["temperature_2m", "dew_point_2m",
+                               "apparent_temperature", "relative_humidity_2m",
+                               "precipitation", "showers",
+                               "snow_depth", "weathercode",
+                               "cloudcover", "windspeed_10m",
+                               "winddirection_10m", "shortwave_radiation",
+                               "direct_radiation", "surface_pressure",
+                               "visibility",
+                               "rain", "snowfall"],
+                    "timezone": "auto"
+                }
+
+                responses = openmeteo.weather_api(url, params=params)
+
+                response = responses[0]
+                # print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
+                # print(f"Elevation {response.Elevation()} m asl")
+                # print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
+                # print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
+
+                hourly = response.Hourly()
+                hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+                hourly_dew_point_2m = hourly.Variables(1).ValuesAsNumpy()
+                hourly_rain = hourly.Variables(2).ValuesAsNumpy()
+                hourly_snowfall = hourly.Variables(3).ValuesAsNumpy()
+                hourly_apparent_temperature = hourly.Variables(4).ValuesAsNumpy()
+                hourly_relative_humidity_2m = hourly.Variables(5).ValuesAsNumpy()
+                hourly_precipitation = hourly.Variables(6).ValuesAsNumpy()
+                hourly_showers = hourly.Variables(7).ValuesAsNumpy()
+                hourly_snow_depth = hourly.Variables(8).ValuesAsNumpy()
+                hourly_weathercode = hourly.Variables(9).ValuesAsNumpy()
+                hourly_cloudcover = hourly.Variables(10).ValuesAsNumpy()
+                hourly_windspeed_10m = hourly.Variables(11).ValuesAsNumpy()
+                hourly_winddirection_10m = hourly.Variables(12).ValuesAsNumpy()
+                hourly_shortwave_radiation = hourly.Variables(13).ValuesAsNumpy()
+                hourly_direct_radiation = hourly.Variables(14).ValuesAsNumpy()
+                hourly_surface_pressure = hourly.Variables(15).ValuesAsNumpy()
+                hourly_visibility = hourly.Variables(16).ValuesAsNumpy()
+
+                utc_time = pd.date_range(
+                    start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+                    end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+                    freq=pd.Timedelta(seconds=hourly.Interval()),
+                    inclusive="left"
+                )
+
+                local_tz = pytz.timezone(response.Timezone())
+                local_time = utc_time.tz_convert(local_tz).tz_localize(None)
+
+                hourly_data = {
+                    "date": local_time,
+                    "temperature_2m": hourly_temperature_2m,
+                    "dew_point_2m": hourly_dew_point_2m,
+                    "rain": hourly_rain,
+                    "snowfall": hourly_snowfall,
+                    "apparent_temperature": hourly_apparent_temperature,
+                    "relative_humidity_2m": hourly_relative_humidity_2m,
+                    "precipitation": hourly_precipitation,
+                    "showers": hourly_showers,
+                    "snow_depth": hourly_snow_depth,
+                    "weathercode": hourly_weathercode,
+                    "cloudcover": hourly_cloudcover,
+                    "windspeed_10m": hourly_windspeed_10m,
+                    "winddirection_10m": hourly_winddirection_10m,
+                    "shortwave_radiation": hourly_shortwave_radiation,
+                    "surface_pressure": hourly_surface_pressure,
+                    "visibility": hourly_visibility
+                }
+
+                hourly_dataframe = pd.DataFrame(data=hourly_data)
+                difi['ДатаЧас'] = pd.to_datetime(difi['ДатаЧас'])
+                hourly_dataframe['date'] = pd.to_datetime(hourly_dataframe['date'])
+                azk_weathered = pd.merge(
+                    difi.rename(columns={"ДатаЧас": "datetime"}),
+                    hourly_dataframe.rename(columns={"date": "datetime"}),
+                    on="datetime",
+                    how="inner"
+                )
+
+                weathered_dfs_list.append(azk_weathered)
+                azk_weathered.to_csv(f"data/clean/azk/outages/{difi['Унікод АЗС'].values[0]}.csv", index=False)
+                pbar.update(1)
+            except Exception as e:
+                time.sleep(60)
+                start_date = difi['ДатаЧас'].values[0]
+                end_date = difi['ДатаЧас'].values[difi.shape[0] - 1]
+
+                start_date = pd.to_datetime(start_date).strftime('%Y-%m-%d')
+                end_date = pd.to_datetime(end_date).strftime('%Y-%m-%d')
+
+                cache_session = requests_cache.CachedSession('.cache', expire_after=-1)
+                retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
+                openmeteo = openmeteo_requests.Client(session=retry_session)
+
+                url = "https://archive-api.open-meteo.com/v1/archive"
+                params = {
+                    "latitude": difi['Latitude'].values[0],
+                    "longitude": difi['Longitude'].values[0],
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "hourly": ["temperature_2m", "dew_point_2m",
+                               "apparent_temperature", "relative_humidity_2m",
+                               "precipitation", "showers",
+                               "snow_depth", "weathercode",
+                               "cloudcover", "windspeed_10m",
+                               "winddirection_10m", "shortwave_radiation",
+                               "direct_radiation", "surface_pressure",
+                               "visibility",
+                               "rain", "snowfall"],
+                    "timezone": "auto"
+                }
+
+                responses = openmeteo.weather_api(url, params=params)
+
+                response = responses[0]
+                # print(f"Coordinates {response.Latitude()}°N {response.Longitude()}°E")
+                # print(f"Elevation {response.Elevation()} m asl")
+                # print(f"Timezone {response.Timezone()} {response.TimezoneAbbreviation()}")
+                # print(f"Timezone difference to GMT+0 {response.UtcOffsetSeconds()} s")
+
+                hourly = response.Hourly()
+                hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+                hourly_dew_point_2m = hourly.Variables(1).ValuesAsNumpy()
+                hourly_rain = hourly.Variables(2).ValuesAsNumpy()
+                hourly_snowfall = hourly.Variables(3).ValuesAsNumpy()
+                hourly_apparent_temperature = hourly.Variables(4).ValuesAsNumpy()
+                hourly_relative_humidity_2m = hourly.Variables(5).ValuesAsNumpy()
+                hourly_precipitation = hourly.Variables(6).ValuesAsNumpy()
+                hourly_showers = hourly.Variables(7).ValuesAsNumpy()
+                hourly_snow_depth = hourly.Variables(8).ValuesAsNumpy()
+                hourly_weathercode = hourly.Variables(9).ValuesAsNumpy()
+                hourly_cloudcover = hourly.Variables(10).ValuesAsNumpy()
+                hourly_windspeed_10m = hourly.Variables(11).ValuesAsNumpy()
+                hourly_winddirection_10m = hourly.Variables(12).ValuesAsNumpy()
+                hourly_shortwave_radiation = hourly.Variables(13).ValuesAsNumpy()
+                hourly_direct_radiation = hourly.Variables(14).ValuesAsNumpy()
+                hourly_surface_pressure = hourly.Variables(15).ValuesAsNumpy()
+                hourly_visibility = hourly.Variables(16).ValuesAsNumpy()
+
+                utc_time = pd.date_range(
+                    start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
+                    end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+                    freq=pd.Timedelta(seconds=hourly.Interval()),
+                    inclusive="left"
+                )
+
+                local_tz = pytz.timezone(response.Timezone())
+                local_time = utc_time.tz_convert(local_tz).tz_localize(None)
+
+                hourly_data = {
+                    "date": local_time,
+                    "temperature_2m": hourly_temperature_2m,
+                    "dew_point_2m": hourly_dew_point_2m,
+                    "rain": hourly_rain,
+                    "snowfall": hourly_snowfall,
+                    "apparent_temperature": hourly_apparent_temperature,
+                    "relative_humidity_2m": hourly_relative_humidity_2m,
+                    "precipitation": hourly_precipitation,
+                    "showers": hourly_showers,
+                    "snow_depth": hourly_snow_depth,
+                    "weathercode": hourly_weathercode,
+                    "cloudcover": hourly_cloudcover,
+                    "windspeed_10m": hourly_windspeed_10m,
+                    "winddirection_10m": hourly_winddirection_10m,
+                    "shortwave_radiation": hourly_shortwave_radiation,
+                    "surface_pressure": hourly_surface_pressure,
+                    "visibility": hourly_visibility
+                }
+
+                hourly_dataframe = pd.DataFrame(data=hourly_data)
+                difi['ДатаЧас'] = pd.to_datetime(difi['ДатаЧас'])
+                hourly_dataframe['date'] = pd.to_datetime(hourly_dataframe['date'])
+                azk_weathered = pd.merge(
+                    difi.rename(columns={"ДатаЧас": "datetime"}),
+                    hourly_dataframe.rename(columns={"date": "datetime"}),
+                    on="datetime",
+                    how="inner"
+                )
+                weathered_dfs_list.append(azk_weathered)
+                azk_weathered.to_csv(f"data/clean/azk/outages/{difi['Унікод АЗС'].values[0]}.csv", index=False)
+                pbar.update(1)
+            # break
+    df_weathered = pd.concat(weathered_dfs_list, axis=0)
+    df_weathered.to_csv('data/clean/weathered_outages.csv', index=False)

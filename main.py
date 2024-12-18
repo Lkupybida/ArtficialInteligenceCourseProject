@@ -7,7 +7,6 @@ if __name__ == "__main__":
 
     # convert_to_hourly_by_station()
 
-    add_weather_data()
-    # combdf = concat_csv_files('data/clean/azk')
-    # print(combdf.shape)
-    # print(combdf.head())
+    # add_weather_data()
+
+    # add_weather_data_outages()
