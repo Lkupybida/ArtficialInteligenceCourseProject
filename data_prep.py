@@ -411,7 +411,7 @@ def concat_csv_files(directory):
     return combined_df
 
 def optimized_weathered_df():
-    df = pd.read_csv('data/clean/weathered.csv')
+    df = combine_csv_parts()
     df['datetime'] = pd.to_datetime(df['datetime'])
     df['kWh'] = df['kWh'].astype(np.float32)
     df['Latitude'] = df['Latitude'].astype(np.float32)
@@ -649,3 +649,36 @@ def add_weather_data_outages():
             # break
     df_weathered = pd.concat(weathered_dfs_list, axis=0)
     df_weathered.to_csv('data/clean/weathered_outages.csv', index=False)
+
+
+import pandas as pd
+import os
+
+
+def split_csv_into_three_parts(input_csv, output_dir):
+    df = pd.read_csv(input_csv)
+    chunk_size = len(df) // 3
+    remainder = len(df) % 3
+
+    splits = [
+        df.iloc[i * chunk_size + min(i, remainder):(i + 1) * chunk_size + min(i + 1, remainder)]
+        for i in range(3)
+    ]
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    output_files = []
+    for i, split in enumerate(splits):
+        file_path = os.path.join(output_dir, f"part_{i + 1}.csv")
+        split.to_csv(file_path, index=False)
+        output_files.append(file_path)
+
+    return output_files
+
+
+def combine_csv_parts(file_paths=['data/clean/weathered/part_1.csv', 'data/clean/weathered/part_2.csv', 'data/clean/weathered/part_3.csv']):
+    dfs = [pd.read_csv(file_path) for file_path in file_paths]
+    combined_df = pd.concat(dfs, ignore_index=True)
+    return combined_df
+
