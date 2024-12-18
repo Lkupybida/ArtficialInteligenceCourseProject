@@ -5,4 +5,9 @@ if __name__ == "__main__":
     # clean_data_wrapper()
     # create_hourly_dataset()
 
-    convert_to_hourly_by_station()
+    # convert_to_hourly_by_station()
+
+    add_weather_data()
+    # combdf = concat_csv_files('data/clean/azk')
+    # print(combdf.shape)
+    # print(combdf.head())
