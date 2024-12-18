@@ -201,7 +201,8 @@ def vizualize_percentiles(df, test, val, model, features):
             errors_df.loc[len(errors_df)] = [col, err_v, err_t, err_m, valid_preds_x, test_preds_x]
         except:
             continue
-
+    print(f"Average error on validation: {errors_df['Valid'].values.mean()}")
+    print(f"Average error on test: {errors_df['Test'].values.mean()}")
     percentiles = errors_df['Mean'].quantile([0, 0.25, 0.5, 0.75, 1])
     k = 0
     names = ['AZK with smallest error', 'AZK with 25% percentile error', 'AZK with median error',
