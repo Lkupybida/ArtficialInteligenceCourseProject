@@ -25,9 +25,8 @@ from sklearn.metrics import mean_absolute_percentage_error as calc_mape
 warnings.filterwarnings("ignore", category=UserWarning)
 
 def custom_score(y_true, y_pred, model, complexity_penalty=0.01):
-    mse = mean_squared_error(y_true, y_pred)
-    if mse <= 9:
-        mse = 9
+
+    mse = smape(y_true, np.clip(y_pred, 0, None))
 
     if hasattr(model, 'n_estimators'):
         complexity = model.n_estimators
@@ -192,11 +191,11 @@ def vizualize_percentiles(df, test, val, model, features):
         test_x = test[test[col] == True]
         val_x = val[val[col] == True]
         try:
-            valid_preds_x = model.predict(val_x[features])
-            test_preds_x = model.predict(test_x[features])
+            valid_preds_x = np.clip(model.predict(val_x[features]), 0, None)
+            test_preds_x = np.clip(model.predict(test_x[features]), 0, None)
             # print(val_x)
-            err_v = mape(val_x['kWh'], valid_preds_x)
-            err_t = mape(test_x['kWh'], test_preds_x)
+            err_v = smape(val_x['kWh'], valid_preds_x)
+            err_t = smape(test_x['kWh'], test_preds_x)
             err_m = (err_v + err_t) / 2
             errors_df.loc[len(errors_df)] = [col, err_v, err_t, err_m, valid_preds_x, test_preds_x]
         except:
